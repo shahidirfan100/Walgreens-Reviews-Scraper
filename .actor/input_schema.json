@@ -1,0 +1,53 @@
+{
+    "title": "Walgreens Reviews Scraper",
+    "description": "Scrape product reviews from Walgreens.com. Provide a full Walgreens product page URL to extract all reviews, ratings, and review metadata via the Bazaarvoice API.",
+    "type": "object",
+    "schemaVersion": 1,
+    "properties": {
+        "url": {
+            "title": "Walgreens Product URL",
+            "type": "string",
+            "description": "Full URL of the Walgreens product page (e.g., https://www.walgreens.com/store/c/nivea-men-maximum-hydration-nourishing-body-lotion-aloe-vera/ID=prod6177789-product).",
+            "editor": "textfield",
+            "prefill": "https://www.walgreens.com/store/c/nivea-men-maximum-hydration-nourishing-body-lotion-aloe-vera/ID=prod6177789-product"
+        },
+        "results_wanted": {
+            "title": "Maximum reviews",
+            "type": "integer",
+            "description": "Maximum number of reviews to collect. Leave empty to collect all available reviews.",
+            "minimum": 1,
+            "default": 20,
+            "prefill": 20,
+            "editor": "number"
+        },
+        "include_ratings_only": {
+            "title": "Include ratings-only reviews",
+            "type": "boolean",
+            "description": "When disabled, only written reviews with review text/title are collected. Enable to include star-only ratings that do not have text.",
+            "default": false,
+            "prefill": false,
+            "editor": "checkbox"
+        },
+        "max_pages": {
+            "title": "Max API pages",
+            "type": "integer",
+            "description": "Maximum number of API pages to fetch (1 page = up to 100 reviews). Caps pagination regardless of results_wanted.",
+            "minimum": 1,
+            "default": 20,
+            "prefill": 20,
+            "editor": "number"
+        },
+        "proxyConfiguration": {
+            "title": "Proxy configuration",
+            "type": "object",
+            "description": "Use Apify Proxy for reliable scraping. Residential proxies recommended for Walgreens.",
+            "editor": "proxy",
+            "default": {
+                "useApifyProxy": true,
+                "apifyProxyGroups": ["RESIDENTIAL"]
+            }
+        }
+    },
+    "required": ["url"],
+    "additionalProperties": false
+}

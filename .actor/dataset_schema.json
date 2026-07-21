@@ -1,0 +1,72 @@
+{
+    "actorSpecification": 1,
+    "views": {
+        "overview": {
+            "title": "Overview",
+            "transformation": {
+                "fields": [
+                    "review_id",
+                    "rating",
+                    "title",
+                    "review_text",
+                    "user_nickname",
+                    "user_location",
+                    "submission_date",
+                    "is_recommended",
+                    "pros",
+                    "cons",
+                    "helpfulness"
+                ]
+            },
+            "display": {
+                "component": "table",
+                "properties": {
+                    "review_id": {
+                        "label": "Review ID",
+                        "format": "text"
+                    },
+                    "rating": {
+                        "label": "Rating",
+                        "format": "text"
+                    },
+                    "title": {
+                        "label": "Title",
+                        "format": "text"
+                    },
+                    "review_text": {
+                        "label": "Review",
+                        "format": "text"
+                    },
+                    "user_nickname": {
+                        "label": "User",
+                        "format": "text"
+                    },
+                    "user_location": {
+                        "label": "Location",
+                        "format": "text"
+                    },
+                    "submission_date": {
+                        "label": "Submitted",
+                        "format": "text"
+                    },
+                    "is_recommended": {
+                        "label": "Recommended",
+                        "format": "text"
+                    },
+                    "pros": {
+                        "label": "Pros",
+                        "format": "text"
+                    },
+                    "cons": {
+                        "label": "Cons",
+                        "format": "text"
+                    },
+                    "helpfulness": {
+                        "label": "Helpfulness",
+                        "format": "text"
+                    }
+                }
+            }
+        }
+    }
+}
