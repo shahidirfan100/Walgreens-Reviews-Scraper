@@ -20,15 +20,7 @@
             "prefill": 20,
             "editor": "number"
         },
-        "include_ratings_only": {
-            "title": "Include ratings-only reviews",
-            "type": "boolean",
-            "description": "When disabled, only written reviews with review text/title are collected. Enable to include star-only ratings that do not have text.",
-            "default": false,
-            "prefill": false,
-            "editor": "checkbox"
-        },
-        "max_pages": {
+                "max_pages": {
             "title": "Max API pages",
             "type": "integer",
             "description": "Maximum number of API pages to fetch (1 page = up to 100 reviews). Caps pagination regardless of results_wanted.",
@@ -36,6 +28,14 @@
             "default": 20,
             "prefill": 20,
             "editor": "number"
+        },
+        "include_ratings_only": {
+            "title": "Include ratings-only reviews",
+            "type": "boolean",
+            "description": "When disabled, only written reviews with review text/title are collected. Enable to include star-only ratings that do not have text.",
+            "default": false,
+            "prefill": false,
+            "editor": "checkbox"
         },
         "proxyConfiguration": {
             "title": "Proxy configuration",
