@@ -6,12 +6,13 @@ await Actor.init();
 
 const input = (await Actor.getInput()) || {};
 const {
-    url: inputUrl,
+    url: inputUrlRaw,
     results_wanted: resultsWantedRaw,
     max_pages: maxPagesRaw,
     include_ratings_only: includeRatingsOnly = false,
     proxyConfiguration,
 } = input;
+const inputUrl = typeof inputUrlRaw === 'string' ? inputUrlRaw.trim() : '';
 
 const resultsWanted =
     resultsWantedRaw != null && Number.isFinite(+resultsWantedRaw)
@@ -27,17 +28,15 @@ if (!inputUrl) {
 }
 
 const isApifyCloud = Actor.isAtHome();
-const proxyConf =
-    (proxyConfiguration?.useApifyProxy || proxyConfiguration?.proxyUrls?.length > 0) && isApifyCloud
-        ? await Actor.createProxyConfiguration({ ...proxyConfiguration })
-        : null;
-
+let proxyConf = null;
 let proxyUrl;
-if (proxyConf) {
+
+if ((proxyConfiguration?.useApifyProxy || proxyConfiguration?.proxyUrls?.length > 0) && isApifyCloud) {
     try {
+        proxyConf = await Actor.createProxyConfiguration({ ...proxyConfiguration });
         proxyUrl = await proxyConf.newUrl();
     } catch {
-        proxyUrl = undefined;
+        log.warning('Proxy configuration could not be initialized; continuing without a proxy.');
     }
 }
 
@@ -83,6 +82,8 @@ function normalizeReviews(batchResult) {
     const items = [];
     if (!batchResult?.BatchedResults?.q0?.Results) return items;
     for (const r of batchResult.BatchedResults.q0.Results) {
+        if (!r || typeof r !== 'object') continue;
+
         const item = {
             review_id: r.Id || null,
             title: r.Title || null,
@@ -102,17 +103,21 @@ function normalizeReviews(batchResult) {
             total_positive_feedback_count: r.TotalPositiveFeedbackCount != null ? r.TotalPositiveFeedbackCount : null,
             total_negative_feedback_count: r.TotalNegativeFeedbackCount != null ? r.TotalNegativeFeedbackCount : null,
             total_comment_count: r.TotalCommentCount != null ? r.TotalCommentCount : null,
-            photos: (r.Photos || []).map((p) => ({
-                photo_id: p.Id || null,
-                caption: p.Caption || null,
-                url_normal: p.Sizes?.normal?.Url || null,
-                url_thumbnail: p.Sizes?.thumbnail?.Url || null,
-            })),
-            videos: (r.Videos || []).map((v) => ({
-                video_id: v.Id || null,
-                video_url: v.VideoUrl || null,
-                caption: v.Caption || null,
-            })),
+            photos: (Array.isArray(r.Photos) ? r.Photos : [])
+                .filter((p) => p && typeof p === 'object')
+                .map((p) => ({
+                    photo_id: p.Id || null,
+                    caption: p.Caption || null,
+                    url_normal: p.Sizes?.normal?.Url || null,
+                    url_thumbnail: p.Sizes?.thumbnail?.Url || null,
+                })),
+            videos: (Array.isArray(r.Videos) ? r.Videos : [])
+                .filter((v) => v && typeof v === 'object')
+                .map((v) => ({
+                    video_id: v.Id || null,
+                    video_url: v.VideoUrl || null,
+                    caption: v.Caption || null,
+                })),
             context_data_values: r.ContextDataValues || null,
             secondary_ratings: r.SecondaryRatings || null,
             badges: r.Badges || null,
@@ -138,6 +143,86 @@ function normalizeReviews(batchResult) {
     return items;
 }
 
+const MAX_REQUEST_RETRIES = 3;
+const RETRYABLE_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
+
+function getRetryDelay(response, attempt) {
+    const retryAfter = response?.headers?.get?.('retry-after');
+    if (retryAfter) {
+        const seconds = Number(retryAfter);
+        if (Number.isFinite(seconds) && seconds >= 0) {
+            return Math.min(5000, seconds * 1000);
+        }
+
+        const retryAt = Date.parse(retryAfter);
+        if (Number.isFinite(retryAt)) {
+            return Math.min(5000, Math.max(0, retryAt - Date.now()));
+        }
+    }
+
+    return Math.min(5000, 250 * 2 ** attempt + Math.floor(Math.random() * 100));
+}
+
+function sleep(milliseconds) {
+    return new Promise((resolve) => {
+        setTimeout(resolve, milliseconds);
+    });
+}
+
+async function fetchJson(apiUrl, description) {
+    for (let attempt = 0; attempt <= MAX_REQUEST_RETRIES; attempt++) {
+        try {
+            const response = await impit.fetch(apiUrl);
+            if (!response || typeof response.ok !== 'boolean') {
+                throw new Error('Invalid response received');
+            }
+
+            if (!response.ok) {
+                if (RETRYABLE_STATUSES.has(response.status) && attempt < MAX_REQUEST_RETRIES) {
+                    const delay = getRetryDelay(response, attempt);
+                    log.warning(
+                        `${description} returned HTTP ${response.status}; retry ${attempt + 1}/${MAX_REQUEST_RETRIES} in ${delay}ms`,
+                    );
+                    await sleep(delay);
+                    continue;
+                }
+
+                log.warning(`${description} returned HTTP ${response.status}; stopping this request.`);
+                return null;
+            }
+
+            const contentType = response.headers?.get?.('content-type')?.toLowerCase() || '';
+            const text = await response.text();
+            if (!text.trim()) {
+                log.warning(`${description} returned an empty response.`);
+                return null;
+            }
+            if (contentType && !contentType.includes('json')) {
+                log.warning(`${description} returned content type ${contentType}; attempting JSON parsing.`);
+            }
+
+            try {
+                return JSON.parse(text);
+            } catch {
+                log.warning(`${description} returned malformed JSON.`);
+                return null;
+            }
+        } catch {
+            if (attempt < MAX_REQUEST_RETRIES) {
+                const delay = getRetryDelay(null, attempt);
+                log.warning(`${description} request failed; retry ${attempt + 1}/${MAX_REQUEST_RETRIES} in ${delay}ms`);
+                await sleep(delay);
+                continue;
+            }
+
+            log.warning(`${description} request failed after ${MAX_REQUEST_RETRIES + 1} attempts.`);
+            return null;
+        }
+    }
+
+    return null;
+}
+
 async function fetchReviews(productId, offset = 0, limit = 100) {
     const params = new URLSearchParams({
         passkey: PASSKEY,
@@ -155,17 +240,7 @@ async function fetchReviews(productId, offset = 0, limit = 100) {
     }
 
     const apiUrl = `https://api.bazaarvoice.com/data/batch.json?${params.toString()}`;
-    const resp = await impit.fetch(apiUrl);
-    if (!resp.ok) {
-        log.warning(`API returned HTTP ${resp.status} at offset ${offset}`);
-        return null;
-    }
-    const text = await resp.text();
-    try {
-        return JSON.parse(text);
-    } catch {
-        return null;
-    }
+    return fetchJson(apiUrl, `Reviews request at offset ${offset}`);
 }
 
 async function fetchProductStats(productId) {
@@ -177,14 +252,7 @@ async function fetchProductStats(productId) {
         'filter.q0': `id:eq:${productId}`,
         'stats.q0': 'Reviews',
     });
-    const resp = await impit.fetch(`https://api.bazaarvoice.com/data/batch.json?${params.toString()}`);
-    if (!resp.ok) return null;
-    const text = await resp.text();
-    try {
-        return JSON.parse(text);
-    } catch {
-        return null;
-    }
+    return fetchJson(`https://api.bazaarvoice.com/data/batch.json?${params.toString()}`, 'Product statistics request');
 }
 
 let saved = 0;
@@ -225,17 +293,22 @@ while (saved < LIMIT) {
         break;
     }
 
-    totalAvailable = batch.TotalResults || 0;
+    totalAvailable = Number.isFinite(Number(batch.TotalResults)) ? Number(batch.TotalResults) : 0;
 
-    if (!batch.Results || batch.Results.length === 0) break;
+    if (!Array.isArray(batch.Results)) {
+        log.warning('Unexpected API response structure: Results is not an array.');
+        break;
+    }
+    if (batch.Results.length === 0) break;
 
     const items = normalizeReviews(result);
     log.info(`Fetched ${items.length} reviews (offset ${offset}, total ${totalAvailable})`);
 
-    for (const item of items) {
-        if (saved >= LIMIT) break;
-        await Dataset.pushData(item);
-        saved++;
+    const itemsToSave = items.slice(0, Math.max(0, LIMIT - saved));
+    if (itemsToSave.length > 0) {
+        await Dataset.pushData(itemsToSave);
+        saved += itemsToSave.length;
+        log.info(`Saved ${itemsToSave.length} reviews. Total: ${saved}`);
     }
 
     if (items.length < PAGE_SIZE) break;

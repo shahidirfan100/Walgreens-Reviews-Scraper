@@ -1,86 +1,81 @@
-# Walgreens Reviews Scraper
+## What does Walgreens Reviews Scraper do?
 
-Extract comprehensive product reviews from Walgreens.com with ease. Collect written review titles, full review text, ratings, user information, photo attachments, and detailed review metadata for Walgreens products. Perfect for market research, competitor analysis, and customer feedback monitoring.
+Walgreens Reviews Scraper collects public customer reviews from Walgreens product pages and returns structured review data for product research, sentiment analysis, brand monitoring, competitor analysis, and retail analytics. Provide one Walgreens product URL, set the review limit, and receive records with ratings, review text, reviewer details, dates, media, badges, and product identifiers.
 
-## Features
+The Actor supports numeric product IDs such as `300428282` and alphanumeric IDs such as `prod6177789`. Written reviews are collected by default. You can also include ratings-only entries when you need the broadest available review history.
 
-- **Written Review Data** - Extract ratings, review titles, full review text, user nicknames, locations, and submission dates
-- **Rich Media Support** - Capture attached photos, videos, pros/cons, secondary ratings, and badges
-- **Automatic Pagination** - Automatically loads all reviews for a product, not just the first page
-- **Ratings-Only Control** - Collect written reviews by default, or include star-only ratings when needed
-- **Rating Statistics** - Get aggregate rating distribution, average scores, and recommendation counts
-- **Syndication Detection** - Identify syndicated reviews and their original sources
-- **Proxy Support** - Works with Apify Proxy for reliable data collection at scale
+## Why use Walgreens Reviews Scraper?
 
-## Use Cases
+- **Customer feedback research** - Collect review titles, full text, star ratings, recommendations, pros, cons, and helpfulness signals in one dataset.
+- **Brand and competitor monitoring** - Track new feedback, recurring complaints, product strengths, and changes in customer perception.
+- **Product quality analysis** - Compare ratings, review themes, reviewer locations, badges, and syndicated content across Walgreens products.
+- **Media and metadata collection** - Preserve review photos, videos, secondary ratings, campaign details, and source information when Walgreens publishes them.
+- **Automation-ready output** - Download JSON, CSV, Excel, or XML, use the Apify API, schedule repeat runs, and connect completed runs to webhooks or workflow tools.
 
-### Product Research
+## What data can you extract from Walgreens reviews?
 
-Analyze customer feedback before sourcing products or making purchasing decisions. Understand real user experiences, common complaints, and quality indicators from verified buyers.
+| Field                           | Type    | Description                                                   |
+| ------------------------------- | ------- | ------------------------------------------------------------- |
+| `review_id`                     | String  | Unique review identifier.                                     |
+| `title`                         | String  | Review headline.                                              |
+| `review_text`                   | String  | Full customer review text.                                    |
+| `rating`                        | Number  | Star rating assigned to the review.                           |
+| `rating_range`                  | Number  | Maximum rating value, normally 5.                             |
+| `user_nickname`                 | String  | Public reviewer nickname when available.                      |
+| `user_location`                 | String  | Reviewer location when published.                             |
+| `submission_date`               | String  | Review submission timestamp.                                  |
+| `moderation_status`             | String  | Published moderation status.                                  |
+| `is_recommended`                | Boolean | Recommendation signal when available.                         |
+| `is_ratings_only`               | Boolean | Whether the record contains a rating without written content. |
+| `pros`                          | String  | Positive points supplied with the review.                     |
+| `cons`                          | String  | Negative points supplied with the review.                     |
+| `helpfulness`                   | Number  | Helpfulness value when available.                             |
+| `total_feedback_count`          | Number  | Total helpfulness feedback votes.                             |
+| `total_positive_feedback_count` | Number  | Positive feedback vote count.                                 |
+| `total_negative_feedback_count` | Number  | Negative feedback vote count.                                 |
+| `total_comment_count`           | Number  | Number of comments on the review.                             |
+| `photos`                        | Array   | Attached photo IDs, captions, and image URLs.                 |
+| `videos`                        | Array   | Attached video IDs, URLs, and captions.                       |
+| `secondary_ratings`             | Object  | Additional rating dimensions published by the source.         |
+| `badges`                        | Object  | Review badges such as verified purchaser labels.              |
+| `context_data_values`           | Object  | Additional review context when available.                     |
+| `additional_fields`             | Object  | Extra source fields supplied with the review.                 |
+| `product_id`                    | String  | Walgreens product identifier.                                 |
+| `product_name`                  | String  | Product name associated with the review.                      |
+| `is_syndicated`                 | Boolean | Whether the review comes from another source.                 |
+| `syndication_source`            | Object  | Name, content link, and logo for syndicated content.          |
+| `campaign_id`                   | String  | Source campaign identifier when available.                    |
+| `author_id`                     | String  | Source author identifier when available.                      |
+| `is_featured`                   | Boolean | Whether the review is featured.                               |
+| `submission_id`                 | String  | Source submission identifier when available.                  |
+| `content_locale`                | String  | Review content locale.                                        |
 
-### Competitive Intelligence
+Unavailable source values are omitted from individual records. This keeps the dataset compact while preserving fields that Walgreens publishes.
 
-Monitor how competitor products are rated on Walgreens. Track review sentiment over time, identify emerging issues, and spot market opportunities based on customer feedback patterns.
+## How to use Walgreens Reviews Scraper
 
-### Brand Monitoring
-
-Track your own brand's product reviews on Walgreens. Get notified of negative reviews quickly, understand customer sentiment, and gather testimonials for marketing.
-
-### Data Analysis
-
-Build comprehensive datasets for business intelligence and machine learning. Analyze rating distributions, correlate review sentiment with product features, and generate insights from thousands of reviews.
-
----
+1. Open the Actor in Apify Console.
+2. Enter a complete public Walgreens product URL containing `/ID=...-product`.
+3. Set `results_wanted` for the number of records to save.
+4. Leave `include_ratings_only` disabled for written reviews, or enable it to include star-only ratings.
+5. Run the Actor and preview the dataset.
+6. Download the results or connect the dataset to an API, schedule, webhook, or automation workflow.
 
 ## Input Parameters
 
-| Parameter              | Type    | Required | Default                   | Description                                                    |
-| ---------------------- | ------- | -------- | ------------------------- | -------------------------------------------------------------- |
-| `url`                  | String  | Yes      | -                         | Full Walgreens product page URL                                |
-| `results_wanted`       | Integer | No       | `20`                      | Maximum number of reviews to collect                           |
-| `include_ratings_only` | Boolean | No       | `false`                   | Include star-only ratings that do not contain review text      |
-| `max_pages`            | Integer | No       | `20`                      | Maximum review pages to check, with up to 100 reviews per page |
-| `proxyConfiguration`   | Object  | No       | Apify Proxy (RESIDENTIAL) | Proxy settings for reliable scraping                           |
-
----
-
-## Output Data
-
-Each item in the dataset contains the following fields:
-
-| Field                           | Type    | Description                                          |
-| ------------------------------- | ------- | ---------------------------------------------------- |
-| `review_id`                     | String  | Unique identifier for the review                     |
-| `title`                         | String  | Review title                                         |
-| `review_text`                   | String  | Full review content                                  |
-| `rating`                        | Number  | Rating out of 5                                      |
-| `user_nickname`                 | String  | Reviewer's display name                              |
-| `user_location`                 | String  | Reviewer's location                                  |
-| `submission_date`               | String  | Date the review was submitted                        |
-| `is_recommended`                | Boolean | Whether the reviewer recommends the product          |
-| `pros`                          | String  | Pros mentioned in the review                         |
-| `cons`                          | String  | Cons mentioned in the review                         |
-| `helpfulness`                   | Number  | Helpfulness score                                    |
-| `photos`                        | Array   | Photos attached to the review (IDs, captions, URLs)  |
-| `videos`                        | Array   | Videos attached to the review                        |
-| `secondary_ratings`             | Array   | Additional rating dimensions (value, label, range)   |
-| `badges`                        | Object  | Badges awarded to the review                         |
-| `context_data_values`           | Object  | Context data about the reviewer                      |
-| `is_syndicated`                 | Boolean | Whether the review is syndicated from another source |
-| `syndication_source`            | Object  | Source of syndicated review (name, link, logo)       |
-| `moderation_status`             | String  | Moderation status of the review                      |
-| `total_feedback_count`          | Number  | Total feedback votes                                 |
-| `total_positive_feedback_count` | Number  | Positive feedback votes                              |
-| `total_negative_feedback_count` | Number  | Negative feedback votes                              |
-| `total_comment_count`           | Number  | Number of comments on the review                     |
-
----
+| Parameter              | Type    | Required | Default                   | Description                                                                       |
+| ---------------------- | ------- | -------- | ------------------------- | --------------------------------------------------------------------------------- |
+| `url`                  | String  | Yes      | Example product URL       | Full Walgreens product page URL. Numeric and `prod...` product IDs are supported. |
+| `results_wanted`       | Integer | No       | `20`                      | Maximum number of reviews to save.                                                |
+| `max_pages`            | Integer | No       | `20`                      | Maximum number of review pages to request, with up to 100 records per page.       |
+| `include_ratings_only` | Boolean | No       | `false`                   | Include star-only entries that do not contain written review content.             |
+| `proxyConfiguration`   | Object  | No       | Apify Proxy configuration | Optional proxy settings for larger, scheduled, or repeated runs.                  |
 
 ## Usage Examples
 
-### Basic Review Extraction
+### Basic written review collection
 
-Extract reviews from a Walgreens product page:
+Collect up to 20 written reviews from a Walgreens product page:
 
 ```json
 {
@@ -89,9 +84,9 @@ Extract reviews from a Walgreens product page:
 }
 ```
 
-### Include Ratings-Only Entries
+### Include ratings-only entries
 
-Collect written reviews plus star-only ratings:
+Collect written reviews and star-only ratings for broader product feedback coverage:
 
 ```json
 {
@@ -101,14 +96,15 @@ Collect written reviews plus star-only ratings:
 }
 ```
 
-### With Residential Proxies
+### Limit pagination and use a proxy
 
-Use residential proxies for better reliability:
+Cap the run at five pages and route the requests through an Apify residential proxy:
 
 ```json
 {
     "url": "https://www.walgreens.com/store/c/nivea-men-maximum-hydration-nourishing-body-lotion-aloe-vera/ID=prod6177789-product",
-    "results_wanted": 100,
+    "results_wanted": 500,
+    "max_pages": 5,
     "proxyConfiguration": {
         "useApifyProxy": true,
         "apifyProxyGroups": ["RESIDENTIAL"]
@@ -116,25 +112,26 @@ Use residential proxies for better reliability:
 }
 ```
 
----
-
 ## Sample Output
+
+The following is one representative written-review item. Fields that are not published for a particular review are omitted.
 
 ```json
 {
-    "review_id": "395833562",
-    "title": "Not Bad",
-    "review_text": "It's a good product, light scent and absorbs well, however it doesn't last as long as I expected.",
-    "rating": 4,
+    "review_id": "401150435",
+    "title": "Men's hydration lotion",
+    "review_text": "Bought for hubby for his baby smooth skin, works great.",
+    "rating": 5,
     "rating_range": 5,
-    "user_nickname": "GlorBee",
-    "user_location": null,
-    "submission_date": "2026-06-25T01:39:15.000+00:00",
+    "user_nickname": "DDebbie",
+    "submission_date": "2026-08-23T11:46:28.000+00:00",
     "moderation_status": "APPROVED",
-    "is_recommended": true,
     "is_ratings_only": false,
-    "helpfulness": 0,
     "total_feedback_count": 0,
+    "total_comment_count": 0,
+    "photos": [],
+    "videos": [],
+    "secondary_ratings": {},
     "badges": {
         "verifiedPurchaser": {
             "ContentType": "REVIEW",
@@ -143,91 +140,70 @@ Use residential proxies for better reliability:
         }
     },
     "product_id": "prod6177789",
-    "product_name": "Maximum Hydration Nourishing Body Lotion Aloe Vera",
+    "product_name": "Maximum Hydration 48-Hour Moisture Body Lotion with Aloe Vera Aloe Vera",
+    "is_syndicated": false,
+    "is_featured": false,
     "content_locale": "en_US"
 }
 ```
 
----
-
 ## Tips for Best Results
 
-### Choose Valid Product URLs
+- Use the full Walgreens product URL, including the `/ID=...-product` portion.
+- Start with `results_wanted: 20` to verify the product and output fields before requesting a larger dataset.
+- Keep `include_ratings_only` disabled when you need review text and titles.
+- Enable `include_ratings_only` when star-only feedback is useful for rating-volume analysis.
+- Increase `max_pages` for products with a long review history, while keeping `results_wanted` aligned with the required dataset size.
+- Some products have no public reviews or only ratings. A zero-result run can reflect the source data rather than an extraction error.
+- Use a proxy configuration for larger or regularly scheduled runs when direct access is unreliable.
 
-- Use product page URLs (containing `/ID=` and ending with `-product`)
-- Verify the product exists and has reviews before scraping
-- Product IDs can be numeric or start with `prod`, and both formats are supported
-- Start with popular products that have many reviews for testing
+## Integrations and Export Formats
 
-### Optimize Collection Size
-
-- Start with `results_wanted: 20` for testing to verify the output format
-- Increase to `results_wanted: 200` or more for production runs
-- Keep `include_ratings_only` disabled when you only need reviews with title and text
-
-### Proxy Configuration
-
-- For single product runs, Apify Proxy may not be required
-- For bulk scraping, residential proxies provide better reliability
-- The scraper automatically handles proxy rotation
-
----
-
-## Integrations
-
-Connect your data with:
-
-- **Google Sheets** - Export for analysis and sharing
-- **Airtable** - Build searchable review databases
-- **Slack** - Get notifications for new negative reviews
-- **Make** - Create automated review monitoring workflows
-- **Zapier** - Trigger actions when new reviews are collected
-
-### Export Formats
-
-- **JSON** - For developers and APIs
-- **CSV** - For spreadsheet analysis
-- **Excel** - For business reporting
-- **XML** - For system integrations
-
----
+- **Google Sheets and Airtable** - Review feedback in familiar tables for analysis and collaboration.
+- **Make, Zapier, or n8n** - Trigger workflows after a run completes.
+- **Webhooks** - Notify a downstream service when a dataset is ready.
+- **Apify API** - Start runs, retrieve datasets, and schedule recurring collection.
+- **JSON, CSV, Excel, and XML** - Export data for applications, spreadsheets, reporting, and data exchange.
 
 ## Frequently Asked Questions
 
-### How many reviews can I collect?
+### Can I collect ratings-only reviews?
 
-You can collect all available written reviews for any product. The scraper automatically paginates through review pages until it reaches `results_wanted` or `max_pages`.
+Yes. Set `include_ratings_only` to `true` to include records that contain a star rating without a written title or review text.
 
-### Does this work for any Walgreens product?
+### Which Walgreens product URLs are supported?
 
-Yes, it works with Walgreens product page URLs that contain `/ID=...-product`, including numeric IDs and IDs such as `prod6177789`.
+Walgreens product URLs containing `/ID=...-product` are supported, including numeric IDs such as `300428282` and alphanumeric IDs such as `prod6177789`.
 
-### What if no reviews are found?
+### Can I collect more than 100 reviews?
 
-Some products have no written reviews yet. If you get 0 results, verify the product URL is correct and try `include_ratings_only: true` to include star-only ratings.
+Yes. The Actor requests review pages of up to 100 records and continues until it reaches `results_wanted`, `max_pages`, or the available review count.
 
-### Can I scrape multiple products?
+### Why are some fields missing?
 
-This actor processes one product URL per run. To scrape multiple products, use Apify's task feature to run multiple instances in parallel, or use the API to trigger runs programmatically.
+Walgreens does not publish every field for every review. Missing reviewer locations, recommendation signals, media, or metadata are omitted from that item when the source does not provide them.
 
-### Are ratings included?
+### Can I scrape multiple products in one run?
 
-Yes, each review includes its individual rating (1-5), and the aggregate statistics (average rating, rating distribution, recommendation counts) are captured in the API responses.
+No. This input contract accepts one product URL per run. For multiple products, create a task or start separate API runs for each URL.
 
----
+### Can I schedule recurring review monitoring?
+
+Yes. Apify schedules can run the Actor daily, weekly, or at another interval. Webhooks and the API can send completed datasets to downstream systems.
+
+### Is collecting Walgreens reviews legal?
+
+Public data collection may be subject to Walgreens terms, applicable laws, privacy rules, and restrictions on storing or redistributing review content. You are responsible for using the Actor only where permitted.
+
+## Related Actors
+
+- [Walgreens Product Scraper](https://apify.com/shahidirfan/walgreens-product-scraper) - Collect Walgreens product listings, prices, availability, ratings, and product details.
+- [Kroger Reviews Scraper](https://apify.com/shahidirfan/kroger-reviews-scraper) - Collect structured customer reviews from Kroger product pages for comparable retail feedback analysis.
 
 ## Support
 
-For issues or feature requests, contact support through the Apify Console.
-
-### Resources
-
-- [Apify Documentation](https://docs.apify.com/)
-- [API Reference](https://docs.apify.com/api/v2)
-- [Scheduling Runs](https://docs.apify.com/schedules)
-
----
+For issues, feature requests, or custom Actor work, use the Issues tab on the Actor page or contact the developer through Apify.
 
 ## Legal Notice
 
-This actor is designed for legitimate data collection purposes. Users are responsible for ensuring compliance with Walgreens terms of service and applicable laws. Use data responsibly and respect rate limits.
+This Actor is designed for legitimate collection of publicly available review data. Users are responsible for complying with Walgreens terms, applicable laws, privacy requirements, and any restrictions on using or redistributing collected content.
