@@ -63,13 +63,13 @@ Unavailable source values are omitted from individual records. This keeps the da
 
 ## Input Parameters
 
-| Parameter              | Type    | Required | Default                   | Description                                                                       |
-| ---------------------- | ------- | -------- | ------------------------- | --------------------------------------------------------------------------------- |
-| `url`                  | String  | Yes      | Example product URL       | Full Walgreens product page URL. Numeric and `prod...` product IDs are supported. |
-| `results_wanted`       | Integer | No       | `20`                      | Maximum number of reviews to save.                                                |
-| `max_pages`            | Integer | No       | `20`                      | Maximum number of review pages to request, with up to 100 records per page.       |
-| `include_ratings_only` | Boolean | No       | `false`                   | Include star-only entries that do not contain written review content.             |
-| `proxyConfiguration`   | Object  | No       | Apify Proxy configuration | Optional proxy settings for larger, scheduled, or repeated runs.                  |
+| Parameter              | Type    | Required | Default             | Description                                                                       |
+| ---------------------- | ------- | -------- | ------------------- | --------------------------------------------------------------------------------- |
+| `url`                  | String  | No       | Example product URL | Full Walgreens product page URL. Numeric and `prod...` product IDs are supported. |
+| `results_wanted`       | Integer | No       | `20`                | Maximum number of reviews to save.                                                |
+| `max_pages`            | Integer | No       | `20`                | Maximum number of review pages to request, with up to 100 records per page.       |
+| `include_ratings_only` | Boolean | No       | `false`             | Include star-only entries that do not contain written review content.             |
+| `proxyConfiguration`   | Object  | No       | No proxy            | Optional proxy settings for larger, scheduled, or repeated runs.                  |
 
 ## Usage Examples
 

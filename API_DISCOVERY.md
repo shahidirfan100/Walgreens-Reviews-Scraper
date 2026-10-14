@@ -134,3 +134,42 @@ Walgreens product URLs can use numeric IDs or alphanumeric `prod...` IDs:
 ```
 
 Extraction must preserve the full value between `ID=` and `-product`; for example `prod6177789`, not just the numeric suffix.
+
+## Diagnosing Failures (read this first)
+
+When a run fails, start here before changing code. Check the pieces in order:
+
+1. **API structure** - confirm the endpoint, required params, and response shape in this document still match. The written-review filter `filter.q0=isratingsonly:eq:false` is required for populated `Title`/`ReviewText` fields.
+2. **Request URL** - log/print the exact request URL and compare its query params to the Required Parameters table. A wrong `productid`, dropped `passkey`, or missing `displaycode` returns empty or unexpected data.
+3. **Response shape** - if the response is not JSON, is an HTML challenge page, or has different top-level keys, log the actual top-level keys. The actor accepts `BatchedResults.q0` (primary), the first `BatchedResults.*` entry, or a top-level `Results` array.
+4. **Transport** - if requests fail, the actor rotates impit browser profiles and then the proxy transport. Check which profile/proxy label is logged.
+
+## impit Browser Profile Compatibility (verified 2026-10)
+
+The Bazaarvoice endpoint uses a modern TLS profile. Older Chrome profiles and `ios18` fail with a TLS `DecodeError` (`AlertReceived`). Verified result, 3 requests each:
+
+| Works | Fails (TLS DecodeError) |
+| ----- | ----------------------- |
+| `chrome`, `chrome124`, `chrome125`, `chrome131`, `chrome136`, `chrome142`, `chrome151` | `chrome100`, `chrome101`, `chrome104`, `chrome107`, `chrome110`, `chrome116`, `ios18` |
+| `firefox`, `firefox128`, `firefox133`, `firefox135`, `firefox144` | |
+| `okhttp`, `okhttp3`, `okhttp4`, `okhttp5` | |
+
+The actor uses a small rotation set drawn only from the working list: `chrome`, `chrome131`, `firefox135`, `chrome124`. All returned HTTP 200 with `TotalResults: 55` and no cookies or custom headers.
+
+## Auto-Healing / Transport Rotation
+
+The actor is API-only and self-recovers from temporary failures:
+
+- **Profile rotation** - on a network error, TLS error, retryable HTTP status (`403`, `406`, `408`, `425`, `429`, `5xx`), empty body, malformed JSON, or unexpected shape, the request moves to the next verified browser profile with bounded exponential backoff (cap 4s, honors `Retry-After`).
+- **Proxy fallback** - direct transports are tried first; a configured proxy transport is used only if direct access fails. `proxyConfiguration` defaults to no proxy because the API is fully public.
+- **Sticky transport** - once a transport succeeds it is reused for subsequent pages (connection reuse).
+- **Loud failure** - if the first reviews request cannot be satisfied by any transport, the actor fails the run (non-zero exit) instead of exiting successfully with an empty dataset.
+- **Tolerant parsing** - accepts several Bazaarvoice response shapes and logs actual top-level keys when the expected shape is missing.
+- **Request budget** - up to 6 attempts with a 15s per-request timeout, keeping a run well inside the 5-minute Apify Store health-test limit.
+
+## Apify Store Health-Test Notes
+
+- The health test runs the actor with the input schema `prefill` values and expects `Succeeded` with a non-empty default dataset within 5 minutes.
+- The schema keeps exactly one `prefill`, on the `url` field, paired with the same `default` so omitted-input runs also have a value.
+- The prefilled product (`prod6177789`, 55 written reviews) returns data quickly and stays under the time limit.
+- `proxyConfiguration` defaults to `{}` (direct requests) so the health test does not depend on residential proxy availability.

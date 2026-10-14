@@ -4,6 +4,19 @@ import { Impit } from 'impit';
 
 await Actor.init();
 
+const PASSKEY = 'tpcm2y0z48bicyt0z3et5n2xf';
+const API_VERSION = '5.5';
+const DISPLAY_CODE = '2001-en_us';
+const API_BASE_URL = 'https://api.bazaarvoice.com/data/batch.json';
+const PAGE_SIZE = 100;
+const REQUEST_TIMEOUT_MS = 15000;
+const MAX_ATTEMPTS = 6;
+const MAX_BACKOFF_MS = 4000;
+const RETRYABLE_STATUSES = new Set([403, 406, 408, 425, 429, 500, 502, 503, 504]);
+const DEFAULT_PRODUCT_URL =
+    'https://www.walgreens.com/store/c/nivea-men-maximum-hydration-nourishing-body-lotion-aloe-vera/ID=prod6177789-product';
+const BROWSER_PROFILES = ['chrome', 'chrome131', 'firefox135', 'chrome124'];
+
 const input = (await Actor.getInput()) || {};
 const {
     url: inputUrlRaw,
@@ -12,7 +25,8 @@ const {
     include_ratings_only: includeRatingsOnly = false,
     proxyConfiguration,
 } = input;
-const inputUrl = typeof inputUrlRaw === 'string' ? inputUrlRaw.trim() : '';
+
+const inputUrl = typeof inputUrlRaw === 'string' && inputUrlRaw.trim() ? inputUrlRaw.trim() : DEFAULT_PRODUCT_URL;
 
 const resultsWanted =
     resultsWantedRaw != null && Number.isFinite(+resultsWantedRaw)
@@ -22,33 +36,41 @@ const maxPages =
     maxPagesRaw != null && Number.isFinite(+maxPagesRaw) ? Math.max(1, +maxPagesRaw) : Number.MAX_SAFE_INTEGER;
 const LIMIT = maxPages === Number.MAX_SAFE_INTEGER ? resultsWanted : Math.min(resultsWanted, maxPages * 100);
 
-if (!inputUrl) {
-    log.error('No URL provided. Please provide a Walgreens product URL.');
-    await Actor.exit();
-}
-
 const isApifyCloud = Actor.isAtHome();
-let proxyConf = null;
+const hasCustomProxyUrls = Array.isArray(proxyConfiguration?.proxyUrls) && proxyConfiguration.proxyUrls.length > 0;
 let proxyUrl;
 
-if ((proxyConfiguration?.useApifyProxy || proxyConfiguration?.proxyUrls?.length > 0) && isApifyCloud) {
+if ((Boolean(proxyConfiguration?.useApifyProxy) && isApifyCloud) || hasCustomProxyUrls) {
     try {
-        proxyConf = await Actor.createProxyConfiguration({ ...proxyConfiguration });
+        const proxyConf = await Actor.createProxyConfiguration({ ...proxyConfiguration });
         proxyUrl = await proxyConf.newUrl();
     } catch {
         log.warning('Proxy configuration could not be initialized; continuing without a proxy.');
     }
 }
 
-const impit = new Impit({
-    browser: 'chrome',
-    ignoreTlsErrors: true,
-    ...(proxyUrl && { proxyUrl }),
-});
+const clients = new Map();
 
-const PASSKEY = 'tpcm2y0z48bicyt0z3et5n2xf';
-const API_VERSION = '5.5';
-const DISPLAY_CODE = '2001-en_us';
+function getClient(profile, useProxy) {
+    const key = `${profile}|${useProxy ? 'proxy' : 'direct'}`;
+    let client = clients.get(key);
+    if (!client) {
+        client = new Impit({
+            browser: profile,
+            ignoreTlsErrors: true,
+            timeout: REQUEST_TIMEOUT_MS,
+            ...(useProxy && proxyUrl ? { proxyUrl } : {}),
+        });
+        clients.set(key, client);
+    }
+    return client;
+}
+
+const transports = BROWSER_PROFILES.map((profile) => ({ profile, useProxy: false }));
+if (proxyUrl) {
+    for (const profile of BROWSER_PROFILES) transports.push({ profile, useProxy: true });
+}
+let transportCursor = 0;
 
 function extractProductIdFromUrl(productUrl) {
     const match =
@@ -78,10 +100,27 @@ function removeEmptyValues(value) {
     return value;
 }
 
-function normalizeReviews(batchResult) {
+function extractBatch(payload) {
+    if (!payload || typeof payload !== 'object') return null;
+
+    const batched = payload.BatchedResults;
+    if (batched && typeof batched === 'object') {
+        if (batched.q0 && typeof batched.q0 === 'object') return batched.q0;
+        const firstKey = Object.keys(batched).find((key) => batched[key] && typeof batched[key] === 'object');
+        if (firstKey) return batched[firstKey];
+    }
+
+    if (Array.isArray(payload.Results)) {
+        return { Results: payload.Results, TotalResults: payload.TotalResults };
+    }
+
+    return null;
+}
+
+function normalizeReviews(batch) {
     const items = [];
-    if (!batchResult?.BatchedResults?.q0?.Results) return items;
-    for (const r of batchResult.BatchedResults.q0.Results) {
+    const results = Array.isArray(batch?.Results) ? batch.Results : [];
+    for (const r of results) {
         if (!r || typeof r !== 'object') continue;
 
         const item = {
@@ -143,87 +182,115 @@ function normalizeReviews(batchResult) {
     return items;
 }
 
-const MAX_REQUEST_RETRIES = 3;
-const RETRYABLE_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
-
-function getRetryDelay(response, attempt) {
-    const retryAfter = response?.headers?.get?.('retry-after');
-    if (retryAfter) {
-        const seconds = Number(retryAfter);
-        if (Number.isFinite(seconds) && seconds >= 0) {
-            return Math.min(5000, seconds * 1000);
-        }
-
-        const retryAt = Date.parse(retryAfter);
-        if (Number.isFinite(retryAt)) {
-            return Math.min(5000, Math.max(0, retryAt - Date.now()));
-        }
-    }
-
-    return Math.min(5000, 250 * 2 ** attempt + Math.floor(Math.random() * 100));
-}
-
 function sleep(milliseconds) {
     return new Promise((resolve) => {
         setTimeout(resolve, milliseconds);
     });
 }
 
+function getRetryDelay(response, attempt) {
+    const retryAfter = response?.headers?.get?.('retry-after');
+    if (retryAfter) {
+        const seconds = Number(retryAfter);
+        if (Number.isFinite(seconds) && seconds >= 0) {
+            return Math.min(MAX_BACKOFF_MS, seconds * 1000);
+        }
+
+        const retryAt = Date.parse(retryAfter);
+        if (Number.isFinite(retryAt)) {
+            return Math.min(MAX_BACKOFF_MS, Math.max(0, retryAt - Date.now()));
+        }
+    }
+
+    return Math.min(MAX_BACKOFF_MS, 300 * 2 ** attempt + Math.floor(Math.random() * 150));
+}
+
 async function fetchJson(apiUrl, description) {
-    for (let attempt = 0; attempt <= MAX_REQUEST_RETRIES; attempt++) {
+    const maxAttempts = Math.max(1, Math.min(transports.length, MAX_ATTEMPTS));
+    let lastError = 'unknown error';
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        const transport = transports[(transportCursor + attempt) % transports.length];
+        const label = `${transport.profile}${transport.useProxy ? '+proxy' : ''}`;
+        const canRetry = attempt < maxAttempts - 1;
+
         try {
-            const response = await impit.fetch(apiUrl);
+            const response = await getClient(transport.profile, transport.useProxy).fetch(apiUrl);
+
             if (!response || typeof response.ok !== 'boolean') {
-                throw new Error('Invalid response received');
+                throw new Error('invalid response object');
             }
 
             if (!response.ok) {
-                if (RETRYABLE_STATUSES.has(response.status) && attempt < MAX_REQUEST_RETRIES) {
+                lastError = `HTTP ${response.status}`;
+                if (RETRYABLE_STATUSES.has(response.status) && canRetry) {
+                    const delay = getRetryDelay(response, attempt);
+                    log.warning(`${description} via ${label} failed: ${lastError}; rotating profile in ${delay}ms`);
+                    await sleep(delay);
+                    continue;
+                }
+                break;
+            }
+
+            const text = await response.text();
+            if (!text.trim()) {
+                lastError = 'empty response body';
+                if (canRetry) {
+                    const delay = getRetryDelay(response, attempt);
+                    log.warning(`${description} via ${label} returned an empty body; rotating profile in ${delay}ms`);
+                    await sleep(delay);
+                    continue;
+                }
+                break;
+            }
+
+            let payload;
+            try {
+                payload = JSON.parse(text);
+            } catch {
+                lastError = 'malformed JSON';
+                if (canRetry) {
+                    const delay = getRetryDelay(response, attempt);
+                    log.warning(`${description} via ${label} returned malformed JSON; rotating profile in ${delay}ms`);
+                    await sleep(delay);
+                    continue;
+                }
+                break;
+            }
+
+            if (!extractBatch(payload)) {
+                const keys = Object.keys(payload).slice(0, 8).join(', ') || 'none';
+                lastError = `unexpected response shape (top-level keys: ${keys})`;
+                if (canRetry) {
                     const delay = getRetryDelay(response, attempt);
                     log.warning(
-                        `${description} returned HTTP ${response.status}; retry ${attempt + 1}/${MAX_REQUEST_RETRIES} in ${delay}ms`,
+                        `${description} via ${label} returned an unexpected shape; rotating profile in ${delay}ms`,
                     );
                     await sleep(delay);
                     continue;
                 }
-
-                log.warning(`${description} returned HTTP ${response.status}; stopping this request.`);
-                return null;
+                break;
             }
 
-            const contentType = response.headers?.get?.('content-type')?.toLowerCase() || '';
-            const text = await response.text();
-            if (!text.trim()) {
-                log.warning(`${description} returned an empty response.`);
-                return null;
-            }
-            if (contentType && !contentType.includes('json')) {
-                log.warning(`${description} returned content type ${contentType}; attempting JSON parsing.`);
-            }
-
-            try {
-                return JSON.parse(text);
-            } catch {
-                log.warning(`${description} returned malformed JSON.`);
-                return null;
-            }
-        } catch {
-            if (attempt < MAX_REQUEST_RETRIES) {
+            transportCursor = (transportCursor + attempt) % transports.length;
+            return payload;
+        } catch (error) {
+            lastError = error?.message ? String(error.message) : String(error);
+            if (canRetry) {
                 const delay = getRetryDelay(null, attempt);
-                log.warning(`${description} request failed; retry ${attempt + 1}/${MAX_REQUEST_RETRIES} in ${delay}ms`);
+                log.warning(`${description} via ${label} errored: ${lastError}; rotating profile in ${delay}ms`);
                 await sleep(delay);
                 continue;
             }
-
-            log.warning(`${description} request failed after ${MAX_REQUEST_RETRIES + 1} attempts.`);
-            return null;
+            break;
         }
     }
 
+    log.warning(`${description} failed after ${maxAttempts} attempt(s): ${lastError}`);
     return null;
 }
 
-async function fetchReviews(productId, offset = 0, limit = 100) {
+function buildReviewsUrl(productId, offset, limit) {
     const params = new URLSearchParams({
         passkey: PASSKEY,
         apiversion: API_VERSION,
@@ -239,8 +306,7 @@ async function fetchReviews(productId, offset = 0, limit = 100) {
         params.append('filter.q0', 'isratingsonly:eq:false');
     }
 
-    const apiUrl = `https://api.bazaarvoice.com/data/batch.json?${params.toString()}`;
-    return fetchJson(apiUrl, `Reviews request at offset ${offset}`);
+    return `${API_BASE_URL}?${params.toString()}`;
 }
 
 async function fetchProductStats(productId) {
@@ -252,26 +318,21 @@ async function fetchProductStats(productId) {
         'filter.q0': `id:eq:${productId}`,
         'stats.q0': 'Reviews',
     });
-    return fetchJson(`https://api.bazaarvoice.com/data/batch.json?${params.toString()}`, 'Product statistics request');
+    return fetchJson(`${API_BASE_URL}?${params.toString()}`, 'Product statistics request');
 }
-
-let saved = 0;
 
 const productId = extractProductIdFromUrl(inputUrl);
 if (!productId) {
-    log.error(`Could not extract product ID from URL: ${inputUrl}`);
-    await Actor.exit();
+    await Actor.fail(`Could not extract a product ID from the URL: ${inputUrl}`);
 }
 log.info(`Walgreens product ID: ${productId}`);
 
 log.info('Fetching product statistics...');
 const statsResult = await fetchProductStats(productId);
 if (statsResult) {
-    const products = statsResult?.BatchedResults?.q0?.Results;
-    if (products && products.length > 0) {
-        const product = products[0];
-        log.info(`Product: ${product.Name || product.Id}`);
-    }
+    const products = extractBatch(statsResult)?.Results;
+    const product = Array.isArray(products) ? products[0] : null;
+    if (product) log.info(`Product: ${product.Name || product.Id}`);
 }
 
 log.info(
@@ -279,15 +340,23 @@ log.info(
         ? 'Fetching all reviews, including ratings-only entries...'
         : 'Fetching written reviews with title/text...',
 );
-let offset = 0;
-const PAGE_SIZE = 100;
+
+let saved = 0;
 let totalAvailable = 0;
+let offset = 0;
+let firstPageFailed = false;
 
 while (saved < LIMIT) {
-    const result = await fetchReviews(productId, offset, PAGE_SIZE);
-    if (!result) break;
+    const result = await fetchJson(
+        buildReviewsUrl(productId, offset, PAGE_SIZE),
+        `Reviews request at offset ${offset}`,
+    );
+    if (!result) {
+        if (offset === 0) firstPageFailed = true;
+        break;
+    }
 
-    const batch = result.BatchedResults?.q0;
+    const batch = extractBatch(result);
     if (!batch) {
         log.warning('Unexpected API response structure');
         break;
@@ -301,7 +370,7 @@ while (saved < LIMIT) {
     }
     if (batch.Results.length === 0) break;
 
-    const items = normalizeReviews(result);
+    const items = normalizeReviews(batch);
     log.info(`Fetched ${items.length} reviews (offset ${offset}, total ${totalAvailable})`);
 
     const itemsToSave = items.slice(0, Math.max(0, LIMIT - saved));
@@ -320,6 +389,9 @@ while (saved < LIMIT) {
 log.info(`Finished. Collected ${saved} reviews for product ${productId}`);
 
 if (saved === 0) {
+    if (firstPageFailed) {
+        await Actor.fail(`Failed to retrieve any reviews for product ${productId}: all requests failed.`);
+    }
     log.warning(
         includeRatingsOnly
             ? 'No reviews found. The product may have no reviews.'
