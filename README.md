@@ -66,9 +66,9 @@ Unavailable source values are omitted from individual records. This keeps the da
 | Parameter              | Type    | Required | Default             | Description                                                                       |
 | ---------------------- | ------- | -------- | ------------------- | --------------------------------------------------------------------------------- |
 | `url`                  | String  | No       | Example product URL | Full Walgreens product page URL. Numeric and `prod...` product IDs are supported. |
-| `results_wanted`       | Integer | No       | `20`                | Maximum number of reviews to save.                                                |
+| `results_wanted`       | Integer | No       | `20`                | Maximum number of reviews to save. Increase this value to collect more reviews.   |
 | `max_pages`            | Integer | No       | `20`                | Maximum number of review pages to request, with up to 100 records per page.       |
-| `include_ratings_only` | Boolean | No       | `false`             | Include star-only entries that do not contain written review content.             |
+| `include_ratings_only` | Boolean | No       | `false`             | Prefer written reviews. Falls back to ratings-only entries when none exist.       |
 | `proxyConfiguration`   | Object  | No       | No proxy            | Optional proxy settings for larger, scheduled, or repeated runs.                  |
 
 ## Usage Examples
@@ -151,7 +151,7 @@ The following is one representative written-review item. Fields that are not pub
 
 - Use the full Walgreens product URL, including the `/ID=...-product` portion.
 - Start with `results_wanted: 20` to verify the product and output fields before requesting a larger dataset.
-- Keep `include_ratings_only` disabled when you need review text and titles.
+- Keep `include_ratings_only` disabled when you need review text and titles. If a product has no written reviews, the Actor automatically falls back to ratings-only entries so the run still returns data.
 - Enable `include_ratings_only` when star-only feedback is useful for rating-volume analysis.
 - Increase `max_pages` for products with a long review history, while keeping `results_wanted` aligned with the required dataset size.
 - Some products have no public reviews or only ratings. A zero-result run can reflect the source data rather than an extraction error.
@@ -169,7 +169,7 @@ The following is one representative written-review item. Fields that are not pub
 
 ### Can I collect ratings-only reviews?
 
-Yes. Set `include_ratings_only` to `true` to include records that contain a star rating without a written title or review text.
+Yes. Set `include_ratings_only` to `true` to include records that contain a star rating without a written title or review text. The Actor also falls back to ratings-only entries automatically when a product has no written reviews.
 
 ### Which Walgreens product URLs are supported?
 

@@ -15,7 +15,7 @@
         "results_wanted": {
             "title": "Maximum reviews",
             "type": "integer",
-            "description": "Maximum number of reviews to collect. Leave empty to collect all available reviews.",
+            "description": "Maximum number of reviews to collect. Defaults to 20; increase this value to collect more reviews.",
             "minimum": 1,
             "default": 20,
             "editor": "number"
@@ -31,7 +31,7 @@
         "include_ratings_only": {
             "title": "Include ratings-only reviews",
             "type": "boolean",
-            "description": "When disabled, only written reviews with review text/title are collected. Enable to include star-only ratings that do not have text.",
+            "description": "When disabled, written reviews are preferred. If a product has no written reviews, the Actor automatically falls back to ratings-only entries so the run still returns data. Enable to always include star-only ratings.",
             "default": false,
             "editor": "checkbox"
         },
@@ -40,7 +40,9 @@
             "type": "object",
             "description": "Optional. Walgreens reviews are fetched directly by default. Configure Apify Proxy or your own proxy URLs only if direct access is unreliable.",
             "editor": "proxy",
-            "default": {}
+            "default": {
+                "useApifyProxy": false
+            }
         }
     },
     "additionalProperties": false
